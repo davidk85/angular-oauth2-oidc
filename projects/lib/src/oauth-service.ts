@@ -65,7 +65,7 @@ export class OAuthService extends AuthConfig {
      * The received (passed around) state, when logging
      * in with implicit flow.
      */
-    public state? = '';
+    public state?= '';
 
     protected eventsSubject: Subject<OAuthEvent> = new Subject<OAuthEvent>();
     protected discoveryDocumentLoadedSubject: Subject<object> = new Subject<object>();
@@ -164,7 +164,7 @@ export class OAuthService extends AuthConfig {
     public setupAutomaticSilentRefresh(params: object = {}, listenTo?: 'access_token' | 'id_token' | 'any') {
         this.events.pipe(filter(e => e.type === 'token_expires')).subscribe(e => {
             const event = e as OAuthInfoEvent;
-            if ( listenTo == null || listenTo === 'any' || event.info === listenTo ) {
+            if (listenTo == null || listenTo === 'any' || event.info === listenTo) {
                 this.silentRefresh(params).catch(_ => {
                     this.debug('Automatic silent refresh did not work');
                 });
@@ -690,10 +690,10 @@ export class OAuthService extends AuthConfig {
                             tokenResponse.refresh_token,
                             tokenResponse.expires_in,
                             tokenResponse.scope
-                        );
-
-                        this.eventsSubject.next(new OAuthSuccessEvent('token_received'));
-                        resolve(tokenResponse);
+                        ).then(() => {
+                            this.eventsSubject.next(new OAuthSuccessEvent('token_received'));
+                            resolve(tokenResponse);
+                        });
                     },
                     err => {
                         this.logger.error('Error performing password flow', err);
@@ -750,11 +750,11 @@ export class OAuthService extends AuthConfig {
                             tokenResponse.refresh_token,
                             tokenResponse.expires_in,
                             tokenResponse.scope
-                        );
-
-                        this.eventsSubject.next(new OAuthSuccessEvent('token_received'));
-                        this.eventsSubject.next(new OAuthSuccessEvent('token_refreshed'));
-                        resolve(tokenResponse);
+                        ).then(() => {
+                            this.eventsSubject.next(new OAuthSuccessEvent('token_received'));
+                            this.eventsSubject.next(new OAuthSuccessEvent('token_refreshed'));
+                            resolve(tokenResponse);
+                        });
                     },
                     err => {
                         this.logger.error('Error performing password flow', err);
@@ -1106,15 +1106,15 @@ export class OAuthService extends AuthConfig {
             }
 
             if (this.config.responseType) {
-              this.responseType = this.config.responseType;
+                this.responseType = this.config.responseType;
             } else {
-              if (this.oidc && this.requestAccessToken) {
-                  this.responseType = 'id_token token';
-              } else if (this.oidc && !this.requestAccessToken) {
-                  this.responseType = 'id_token';
-              } else {
-                  this.responseType = 'token';
-              }
+                if (this.oidc && this.requestAccessToken) {
+                    this.responseType = 'id_token token';
+                } else if (this.oidc && !this.requestAccessToken) {
+                    this.responseType = 'id_token';
+                } else {
+                    this.responseType = 'token';
+                }
             }
 
             const seperationChar = that.loginUrl.indexOf('?') > -1 ? '&' : '?';
@@ -1246,22 +1246,26 @@ export class OAuthService extends AuthConfig {
         refreshToken: string,
         expiresIn: number,
         grantedScopes: String
-    ): void {
-        this._storage.setItem('access_token', accessToken);
-        if (grantedScopes) {
-            this._storage.setItem('granted_scopes', JSON.stringify(grantedScopes.split('+')));
-        }
-        this._storage.setItem('access_token_stored_at', '' + Date.now());
-        if (expiresIn) {
-            const expiresInMilliSeconds = expiresIn * 1000;
-            const now = new Date();
-            const expiresAt = now.getTime() + expiresInMilliSeconds;
-            this._storage.setItem('expires_at', '' + expiresAt);
-        }
+    ): Promise<boolean> {
+        return new Promise((resolve) => {
+            this._storage.setItem('access_token', accessToken);
+            if (grantedScopes) {
+                this._storage.setItem('granted_scopes', JSON.stringify(grantedScopes.split('+')));
+            }
+            this._storage.setItem('access_token_stored_at', '' + Date.now());
+            if (expiresIn) {
+                const expiresInMilliSeconds = expiresIn * 1000;
+                const now = new Date();
+                const expiresAt = now.getTime() + expiresInMilliSeconds;
+                this._storage.setItem('expires_at', '' + expiresAt);
+            }
 
-        if (refreshToken) {
-            this._storage.setItem('refresh_token', refreshToken);
-        }
+            if (refreshToken) {
+                this._storage.setItem('refresh_token', refreshToken);
+            }
+            resolve(true);
+        });
+
     }
 
     /**
@@ -1352,7 +1356,7 @@ export class OAuthService extends AuthConfig {
                 null,
                 parts['expires_in'] || this.fallbackAccessTokenExpirationTimeInSec,
                 grantedScopes
-            );
+            ).then(() => { });
         }
 
         if (!this.oidc) {
@@ -1552,30 +1556,30 @@ export class OAuthService extends AuthConfig {
 
 
         return this.checkAtHash(validationParams)
-          .then(atHashValid => {
-            if (
-              !this.disableAtHashCheck &&
-              this.requestAccessToken &&
-              !atHashValid
-          ) {
-              const err = 'Wrong at_hash';
-              this.logger.warn(err);
-              return Promise.reject(err);
-          }
+            .then(atHashValid => {
+                if (
+                    !this.disableAtHashCheck &&
+                    this.requestAccessToken &&
+                    !atHashValid
+                ) {
+                    const err = 'Wrong at_hash';
+                    this.logger.warn(err);
+                    return Promise.reject(err);
+                }
 
-          return this.checkSignature(validationParams).then(_ => {
-              const result: ParsedIdToken = {
-                  idToken: idToken,
-                  idTokenClaims: claims,
-                  idTokenClaimsJson: claimsJson,
-                  idTokenHeader: header,
-                  idTokenHeaderJson: headerJson,
-                  idTokenExpiresAt: expiresAtMSec
-              };
-              return result;
-          });
+                return this.checkSignature(validationParams).then(_ => {
+                    const result: ParsedIdToken = {
+                        idToken: idToken,
+                        idTokenClaims: claims,
+                        idTokenClaimsJson: claimsJson,
+                        idTokenHeader: header,
+                        idTokenHeaderJson: headerJson,
+                        idTokenExpiresAt: expiresAtMSec
+                    };
+                    return result;
+                });
 
-        });
+            });
     }
 
     /**
